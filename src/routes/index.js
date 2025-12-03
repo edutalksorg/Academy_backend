@@ -8,5 +8,8 @@ router.use('/attempts', require('./attempts.routes'));
 router.use('/reports', require('./reports.routes'));
 router.use('/tpo', require('./tpo.routes'));
 router.use('/student', require('./student.routes'));
+router.use('/instructor', require('./instructor.routes'));
+router.use('/colleges', require('./college.routes'));
 
 module.exports = router;
+

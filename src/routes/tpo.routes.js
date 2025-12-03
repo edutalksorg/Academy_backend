@@ -7,5 +7,7 @@ const roleCheck = require('../middlewares/roleCheck');
 router.use(authJwt, roleCheck('tpo'));
 
 router.get('/students', tpoController.getCollegeStudents);
+router.get('/stats', tpoController.getDashboardStats);
+router.get('/college-report', tpoController.getCollegeReport);
 
 module.exports = router;

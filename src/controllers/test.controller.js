@@ -51,4 +51,12 @@ async function listPublished(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { createTest, updateTest, deleteTest, addQuestion, getTest, listPublished };
+async function listMyTests(req, res, next) {
+  try {
+    const instructorId = req.user.id;
+    const tests = await testService.listTestsByInstructor(instructorId);
+    res.json({ success: true, data: tests });
+  } catch (err) { next(err); }
+}
+
+module.exports = { createTest, updateTest, deleteTest, addQuestion, getTest, listPublished, listMyTests };

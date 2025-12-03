@@ -4,7 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     attemptId: { type: DataTypes.INTEGER, allowNull: false },
     questionId: { type: DataTypes.INTEGER, allowNull: false },
     selectedOptionId: { type: DataTypes.INTEGER, allowNull: true },
-    isCorrect: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    isCorrect: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: null },
     marksAwarded: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 }
   }, {
     tableName: 'attempt_answers',

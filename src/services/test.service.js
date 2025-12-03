@@ -1,7 +1,8 @@
-const { Test, Question, Option } = require('../models');
+const { Test, Question, Option, Attempt } = require('../models');
+const { Op } = require('sequelize');
 
-async function createTest({ title, description, instructorId, collegeId, timeLimit, status = 'draft' }) {
-  return Test.create({ title, description, instructorId, collegeId, timeLimit, status });
+async function createTest({ title, description, instructorId, collegeId, timeLimit, status = 'draft', startTime, endTime }) {
+  return Test.create({ title, description, instructorId, collegeId, timeLimit, status, startTime, endTime });
 }
 
 async function updateTest(id, payload) {
@@ -30,19 +31,64 @@ async function getTestWithQuestions(id) {
   return Test.findByPk(id, { include: [{ model: Question, include: [Option] }] });
 }
 
-const { Op } = require('sequelize');
+async function listPublishedTests({ collegeId, q, limit = 50, offset = 0, userId } = {}) {
+  const now = new Date();
+  const where = {
+    status: 'published',
+    [Op.or]: [
+      { endTime: null },
+      { endTime: { [Op.gt]: now } }
+    ]
+  };
 
-async function listPublishedTests({ collegeId, q, limit = 50, offset = 0 } = {}) {
-  const where = { status: 'published' };
   if (collegeId) where.collegeId = collegeId;
+
+  if (userId) {
+    const completedAttempts = await Attempt.findAll({
+      where: { userId, status: 'completed' },
+      attributes: ['testId']
+    });
+    const completedTestIds = completedAttempts.map(a => a.testId);
+    if (completedTestIds.length > 0) {
+      where.id = { [Op.notIn]: completedTestIds };
+    }
+  }
+
   if (q) {
-    where[Op.or] = [
-      { title: { [Op.like]: `%${q}%` } },
-      { description: { [Op.like]: `%${q}%` } }
+    where[Op.and] = [
+      {
+        [Op.or]: [
+          { title: { [Op.like]: `%${q}%` } },
+          { description: { [Op.like]: `%${q}%` } }
+        ]
+      }
     ];
   }
   return Test.findAndCountAll({ where, limit, offset, include: [{ model: Question, include: [Option] }] });
 }
 
-module.exports = { createTest, updateTest, deleteTest, addQuestionWithOptions, getTestWithQuestions, listPublishedTests };
+async function listTestsByInstructor(instructorId) {
+  return Test.findAll({
+    where: { instructorId },
+    order: [['createdAt', 'DESC']],
+    include: [{ model: Question }]
+  });
+}
 
+async function getPublishedTestIds({ collegeId } = {}) {
+  const now = new Date();
+  const where = {
+    status: 'published',
+    [Op.or]: [
+      { endTime: null },
+      { endTime: { [Op.gt]: now } }
+    ]
+  };
+  if (collegeId) where.collegeId = collegeId;
+  return Test.findAll({
+    where,
+    attributes: ['id']
+  });
+}
+
+module.exports = { createTest, updateTest, deleteTest, addQuestionWithOptions, getTestWithQuestions, listPublishedTests, listTestsByInstructor, getPublishedTestIds };

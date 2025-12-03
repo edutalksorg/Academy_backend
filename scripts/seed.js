@@ -12,15 +12,15 @@ async function seed() {
     // Create colleges
     const [greenfield] = await College.findOrCreate({
       where: { name: 'Greenfield Institute' },
-      defaults: { address: '123 Green Street, Boston, MA' }
+      defaults: { name: 'Greenfield Institute', collegeCode: 'GFI001', address: '123 Green Street, Boston, MA' }
     });
     const [riverview] = await College.findOrCreate({
       where: { name: 'Riverview College' },
-      defaults: { address: '456 River Road, Cambridge, MA' }
+      defaults: { name: 'Riverview College', collegeCode: 'RVC002', address: '456 River Road, Cambridge, MA' }
     });
     const [techValley] = await College.findOrCreate({
       where: { name: 'Tech Valley University' },
-      defaults: { address: '789 Tech Avenue, San Francisco, CA' }
+      defaults: { name: 'Tech Valley University', collegeCode: 'TVU003', address: '789 Tech Avenue, San Francisco, CA' }
     });
     console.log('✓ Created 3 colleges');
 

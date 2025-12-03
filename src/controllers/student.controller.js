@@ -19,10 +19,9 @@ async function getStats(req, res, next) {
             avgScore = totalScore / completedTests;
         }
 
-        // Get available tests count
-        // Assuming listPublishedTests returns { count, rows }
-        const publishedTests = await testService.listPublishedTests({ limit: 1 });
-        const availableTests = publishedTests.count;
+        // Get available tests count (Total Active Tests)
+        const publishedTests = await testService.getPublishedTestIds();
+        const availableTests = publishedTests.length;
 
         res.json({
             success: true,

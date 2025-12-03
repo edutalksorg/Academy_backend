@@ -4,21 +4,65 @@ const { hashPassword, comparePassword } = require('../utils/password');
 const { sign } = require('../utils/jwt');
 const config = require('../config/config');
 
-const registerSchema = Joi.object({ name: Joi.string().required(), email: Joi.string().email().required(), password: Joi.string().min(6).required(), role: Joi.string().valid('student', 'instructor', 'tpo').required(), collegeId: Joi.number().optional() });
+const registerSchema = Joi.object({
+  name: Joi.string().required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
+  role: Joi.string().valid('student', 'instructor', 'tpo').required(),
+  collegeId: Joi.number().optional(),
+  collegeName: Joi.string().when('role', { is: 'tpo', then: Joi.required(), otherwise: Joi.forbidden() }),
+  collegeCode: Joi.string().when('role', { is: 'tpo', then: Joi.required(), otherwise: Joi.forbidden() })
+});
+
 
 async function register(req, res, next) {
   try {
     const { error, value } = registerSchema.validate(req.body);
     if (error) return res.status(400).json({ success: false, message: 'Validation error', errors: error.details });
 
-    const { name, email, password, role, collegeId } = value;
+    const { name, email, password, role, collegeId, collegeName, collegeCode } = value;
     const exists = await User.findOne({ where: { email } });
     if (exists) return res.status(409).json({ success: false, message: 'Email already registered' });
+
+    let finalCollegeId = collegeId;
+
+    // If TPO, create a new college
+    if (role === 'tpo') {
+      const { College } = require('../models');
+
+      // Check if college name or code already exists
+      const existingCollege = await College.findOne({
+        where: {
+          [require('sequelize').Op.or]: [
+            { name: collegeName },
+            { collegeCode: collegeCode }
+          ]
+        }
+      });
+
+      if (existingCollege) {
+        if (existingCollege.name === collegeName) {
+          return res.status(409).json({ success: false, message: 'College name already exists' });
+        }
+        if (existingCollege.collegeCode === collegeCode) {
+          return res.status(409).json({ success: false, message: 'College code already exists' });
+        }
+      }
+
+      // Create new college
+      const newCollege = await College.create({
+        name: collegeName,
+        collegeCode: collegeCode,
+        address: null
+      });
+
+      finalCollegeId = newCollege.id;
+    }
 
     const passwordHash = await hashPassword(password);
     const status = role === 'student' ? 'active' : 'pending';
 
-    const user = await User.create({ name, email, passwordHash, role, status, collegeId: collegeId || null });
+    const user = await User.create({ name, email, passwordHash, role, status, collegeId: finalCollegeId || null });
 
     return res.status(201).json({ success: true, message: 'Registered', data: { id: user.id, status: user.status } });
   } catch (err) {

@@ -36,7 +36,7 @@ async function getAttemptsByUser(userId, { limit = 50, offset = 0 } = {}) {
 }
 
 async function getResultsByTest(testId) {
-  return Attempt.findAll({ where: { testId, status: 'completed' }, include: [ { model: AttemptAnswer } ] });
+  return Attempt.findAll({ where: { testId, status: 'completed' }, include: [{ model: AttemptAnswer }] });
 }
 
 module.exports = { startAttempt, submitAttempt, getAttemptsByUser, getResultsByTest };

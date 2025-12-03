@@ -7,7 +7,9 @@ module.exports = (sequelize, DataTypes) => {
     collegeId: { type: DataTypes.INTEGER, allowNull: true },
     timeLimit: { type: DataTypes.INTEGER, allowNull: true },
     totalMarks: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
-    status: { type: DataTypes.ENUM('draft', 'published'), allowNull: false, defaultValue: 'draft' }
+    status: { type: DataTypes.ENUM('draft', 'published'), allowNull: false, defaultValue: 'draft' },
+    startTime: { type: DataTypes.DATE, allowNull: true },
+    endTime: { type: DataTypes.DATE, allowNull: true }
   }, {
     tableName: 'tests',
     timestamps: true
