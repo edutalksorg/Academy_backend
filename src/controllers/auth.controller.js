@@ -86,10 +86,53 @@ async function login(req, res, next) {
     if (user.status !== 'active') return res.status(403).json({ success: false, message: 'Account not active' });
 
     const token = sign({ id: user.id, role: user.role });
+
+    // Log activity (with deduplication to prevent double-logging from React StrictMode)
+    const { ActivityLog } = require('../models');
+    const { Op } = require('sequelize');
+    const twoSecondsAgo = new Date(Date.now() - 2000);
+
+    const recentLogin = await ActivityLog.findOne({
+      where: {
+        userId: user.id,
+        action: 'LOGIN',
+        createdAt: { [Op.gte]: twoSecondsAgo }
+      }
+    });
+
+    if (!recentLogin) {
+      await ActivityLog.create({ userId: user.id, action: 'LOGIN' });
+    }
+
     return res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } } });
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { register, login };
+async function logout(req, res, next) {
+  try {
+    if (req.user) {
+      const { ActivityLog } = require('../models');
+      const { Op } = require('sequelize');
+      const twoSecondsAgo = new Date(Date.now() - 2000);
+
+      const recentLogout = await ActivityLog.findOne({
+        where: {
+          userId: req.user.id,
+          action: 'LOGOUT',
+          createdAt: { [Op.gte]: twoSecondsAgo }
+        }
+      });
+
+      if (!recentLogout) {
+        await ActivityLog.create({ userId: req.user.id, action: 'LOGOUT' });
+      }
+    }
+    res.json({ success: true, message: 'Logged out' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, logout };

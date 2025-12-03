@@ -24,4 +24,12 @@ async function myAttempts(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { start, submit, myAttempts };
+async function recordTabSwitch(req, res, next) {
+  try {
+    const attemptId = parseInt(req.params.attemptId, 10);
+    const attempt = await attemptService.incrementTabSwitches(attemptId);
+    res.json({ success: true, data: { tabSwitchCount: attempt.tabSwitchCount } });
+  } catch (err) { next(err); }
+}
+
+module.exports = { start, submit, myAttempts, recordTabSwitch };

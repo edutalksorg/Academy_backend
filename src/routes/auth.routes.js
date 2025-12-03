@@ -4,5 +4,6 @@ const { register, login } = require('../controllers/auth.controller');
 
 router.post('/register', register);
 router.post('/login', login);
+router.post('/logout', require('../middlewares/authJwt'), require('../controllers/auth.controller').logout);
 
 module.exports = router;

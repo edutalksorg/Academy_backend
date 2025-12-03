@@ -41,7 +41,7 @@ async function findStudentsByCollege(collegeId, { limit = 20, offset = 0 } = {})
     include: [{
       model: Attempt,
       as: 'Attempts',
-      attributes: ['id', 'totalScore', 'createdAt'],
+      attributes: ['id', 'totalScore', 'createdAt', 'tabSwitchCount'],
       required: false
     }],
     order: [['createdAt', 'DESC']]

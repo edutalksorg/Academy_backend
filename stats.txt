@@ -1,0 +1,12 @@
+
+--- DB STATS ---
+Total Colleges: 6
+Total Users: 24
+Pending Approvals: 3
+Active Tests: 8
+Total Students: 13
+Total Instructors: 4
+Total TPOs: 5
+Total Attempts: 12
+----------------
+    

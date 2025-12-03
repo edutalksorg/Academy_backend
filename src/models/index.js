@@ -35,10 +35,14 @@ db.Question = require('./question.model')(sequelize, DataTypes);
 db.Option = require('./option.model')(sequelize, DataTypes);
 db.Attempt = require('./attempt.model')(sequelize, DataTypes);
 db.AttemptAnswer = require('./attemptAnswer.model')(sequelize, DataTypes);
+db.ActivityLog = require('./activityLog.model')(sequelize, DataTypes);
 
 // Associations
 db.College.hasMany(db.User, { foreignKey: 'collegeId' });
 db.User.belongsTo(db.College, { foreignKey: 'collegeId' });
+
+db.User.hasMany(db.ActivityLog, { foreignKey: 'userId' });
+db.ActivityLog.belongsTo(db.User, { foreignKey: 'userId' });
 
 db.User.hasMany(db.Test, { foreignKey: 'instructorId' });
 db.Test.belongsTo(db.User, { as: 'instructor', foreignKey: 'instructorId' });
