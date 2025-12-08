@@ -36,6 +36,7 @@ db.Option = require('./option.model')(sequelize, DataTypes);
 db.Attempt = require('./attempt.model')(sequelize, DataTypes);
 db.AttemptAnswer = require('./attemptAnswer.model')(sequelize, DataTypes);
 db.ActivityLog = require('./activityLog.model')(sequelize, DataTypes);
+db.AllowedStudent = require('./allowedStudent.model')(sequelize, DataTypes);
 
 // Associations
 db.College.hasMany(db.User, { foreignKey: 'collegeId' });

@@ -130,106 +130,121 @@ async function getCollegeStats(collegeId) {
 }
 
 async function getCollegeReport(collegeId, { dateFrom, dateTo } = {}) {
-  const { Test, Attempt, Question } = require('../models');
+  try {
+    console.log('getCollegeReport called with:', { collegeId, dateFrom, dateTo });
+    const { Test, Attempt, Question } = require('../models');
 
-  // Date filter for attempts
-  const attemptWhere = {};
-  if (dateFrom && dateTo) {
-    attemptWhere.createdAt = {
-      [Op.between]: [new Date(dateFrom), new Date(dateTo + 'T23:59:59.999Z')]
-    };
-  } else if (dateFrom) {
-    attemptWhere.createdAt = { [Op.gte]: new Date(dateFrom) };
-  } else if (dateTo) {
-    attemptWhere.createdAt = { [Op.lte]: new Date(dateTo + 'T23:59:59.999Z') };
-  }
-
-  // 1. Total Students
-  const totalStudents = await User.count({ where: { collegeId, role: 'student' } });
-
-  // 2. Get all students with their attempts within date range
-  const students = await User.findAll({
-    where: { collegeId, role: 'student' },
-    attributes: ['id'],
-    include: [{
-      model: Attempt,
-      where: attemptWhere,
-      required: false, // Include students even if they have no attempts in range
-      include: [{
-        model: Test,
-        attributes: ['title', 'passingScore']
-      }]
-    }]
-  });
-
-  let totalTests = 0;
-  let totalScoreSum = 0;
-  let passedTests = 0;
-
-  let excellent = 0; // 80%+
-  let good = 0; // 60-80%
-  let average = 0; // 40-60%
-  let belowAverage = 0; // <40%
-
-  // Test-wise stats aggregation
-  const testMap = {};
-
-  students.forEach(student => {
-    const attempts = student.Attempts || [];
-
-    // Calculate student average for performance breakdown
-    if (attempts.length > 0) {
-      const studentTotal = attempts.reduce((sum, a) => sum + (a.totalScore || 0), 0);
-      const studentAvg = studentTotal / attempts.length;
-
-      if (studentAvg >= 80) excellent++;
-      else if (studentAvg >= 60) good++;
-      else if (studentAvg >= 40) average++;
-      else belowAverage++;
+    // Date filter for attempts
+    const attemptWhere = {};
+    if (dateFrom && dateTo) {
+      attemptWhere.createdAt = {
+        [Op.between]: [new Date(dateFrom), new Date(dateTo + 'T23:59:59.999Z')]
+      };
+    } else if (dateFrom) {
+      attemptWhere.createdAt = { [Op.gte]: new Date(dateFrom) };
+    } else if (dateTo) {
+      attemptWhere.createdAt = { [Op.lte]: new Date(dateTo + 'T23:59:59.999Z') };
     }
+    console.log('Attempt where clause:', attemptWhere);
 
-    attempts.forEach(attempt => {
-      totalTests++;
-      totalScoreSum += (attempt.totalScore || 0);
+    // 1. Total Students
+    const totalStudents = await User.count({ where: { collegeId, role: 'student' } });
 
-      // Check pass/fail
-      if (attempt.Test && attempt.totalScore >= (attempt.Test.passingScore || 40)) {
-        passedTests++;
-      }
-
-      // Aggregate test-wise stats
-      if (attempt.Test) {
-        const testName = attempt.Test.title;
-        if (!testMap[testName]) {
-          testMap[testName] = { testName, attempts: 0, totalScore: 0 };
-        }
-        testMap[testName].attempts++;
-        testMap[testName].totalScore += (attempt.totalScore || 0);
-      }
+    // 2. Get all students with their attempts within date range
+    const students = await User.findAll({
+      where: { collegeId, role: 'student' },
+      attributes: ['id'],
+      include: [{
+        model: Attempt,
+        as: 'Attempts',
+        where: attemptWhere,
+        required: false, // Include students even if they have no attempts in range
+        include: [{
+          model: Test,
+          attributes: ['title', 'totalMarks'] // Include totalMarks to calculate percentage
+        }]
+      }]
     });
-  });
 
-  const avgScore = totalTests > 0 ? totalScoreSum / totalTests : 0;
-  const passRate = totalTests > 0 ? (passedTests / totalTests) * 100 : 0;
+    let totalTests = 0;
+    let totalScoreSum = 0;
+    let passedTests = 0;
 
-  // Format test stats
-  const testStats = Object.values(testMap).map(t => ({
-    testName: t.testName,
-    attempts: t.attempts,
-    avgScore: t.attempts > 0 ? t.totalScore / t.attempts : 0
-  })).sort((a, b) => b.attempts - a.attempts); // Sort by most attempted
+    let excellent = 0; // 80%+
+    let good = 0; // 60-80%
+    let average = 0; // 40-60%
+    let belowAverage = 0; // <40%
 
-  return {
-    totalStudents,
-    totalTests,
-    avgScore,
-    passRate,
-    excellent,
-    good,
-    average,
-    belowAverage,
-    testStats
-  };
+    // Test-wise stats aggregation
+    const testMap = {};
+
+    students.forEach(student => {
+      const attempts = student.Attempts || [];
+
+      // Calculate student average for performance breakdown
+      if (attempts.length > 0) {
+        const studentScores = attempts.map(a => {
+          const totalMarks = a.Test?.totalMarks || 100;
+          return (a.totalScore / totalMarks) * 100;
+        });
+        const studentAvg = studentScores.reduce((sum, score) => sum + score, 0) / studentScores.length;
+
+        if (studentAvg >= 80) excellent++;
+        else if (studentAvg >= 60) good++;
+        else if (studentAvg >= 40) average++;
+        else belowAverage++;
+      }
+
+      attempts.forEach(attempt => {
+        totalTests++;
+
+        // Convert raw score to percentage
+        const totalMarks = attempt.Test?.totalMarks || 100;
+        const scorePercentage = (attempt.totalScore / totalMarks) * 100;
+        totalScoreSum += scorePercentage;
+
+        // Check pass/fail - using default passing score of 40%
+        if (scorePercentage >= 40) {
+          passedTests++;
+        }
+
+        // Aggregate test-wise stats
+        if (attempt.Test) {
+          const testName = attempt.Test.title;
+          if (!testMap[testName]) {
+            testMap[testName] = { testName, attempts: 0, totalScore: 0 };
+          }
+          testMap[testName].attempts++;
+          testMap[testName].totalScore += scorePercentage;
+        }
+      });
+    });
+
+    const avgScore = totalTests > 0 ? totalScoreSum / totalTests : 0;
+    const passRate = totalTests > 0 ? (passedTests / totalTests) * 100 : 0;
+
+    // Format test stats
+    const testStats = Object.values(testMap).map(t => ({
+      testName: t.testName,
+      attempts: t.attempts,
+      avgScore: t.attempts > 0 ? t.totalScore / t.attempts : 0
+    })).sort((a, b) => b.attempts - a.attempts); // Sort by most attempted
+
+    return {
+      totalStudents,
+      totalTests,
+      avgScore,
+      passRate,
+      excellent,
+      good,
+      average,
+      belowAverage,
+      testStats
+    };
+  } catch (error) {
+    console.error('Error in getCollegeReport:', error);
+    throw error;
+  }
 }
 
 module.exports = { getPendingUsers, approveUser, findById, findStudentsByCollege, getCollegeStats, getCollegeReport };

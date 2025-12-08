@@ -1,12 +1,34 @@
 const userService = require('../services/user.service');
 const { User, College, Test, Attempt } = require('../models');
 
+const { Op } = require('sequelize');
+
 async function getStats(req, res, next) {
   try {
     const totalColleges = await College.count();
     const totalUsers = await User.count();
     const pendingApprovals = await User.count({ where: { status: 'pending' } });
-    const activeTests = await Test.count({ where: { status: 'published' } });
+
+    const now = new Date();
+    const activeTests = await Test.count({
+      where: {
+        status: 'published',
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { startTime: { [Op.eq]: null } },
+              { startTime: { [Op.lte]: now } }
+            ]
+          },
+          {
+            [Op.or]: [
+              { endTime: { [Op.eq]: null } },
+              { endTime: { [Op.gte]: now } }
+            ]
+          }
+        ]
+      }
+    });
 
     const totalStudents = await User.count({ where: { role: 'student' } });
     const totalInstructors = await User.count({ where: { role: 'instructor' } });

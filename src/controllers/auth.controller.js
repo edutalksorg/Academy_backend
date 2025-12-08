@@ -11,7 +11,8 @@ const registerSchema = Joi.object({
   role: Joi.string().valid('student', 'instructor', 'tpo').required(),
   collegeId: Joi.number().optional(),
   collegeName: Joi.string().when('role', { is: 'tpo', then: Joi.required(), otherwise: Joi.forbidden() }),
-  collegeCode: Joi.string().when('role', { is: 'tpo', then: Joi.required(), otherwise: Joi.forbidden() })
+  collegeCode: Joi.string().when('role', { is: 'tpo', then: Joi.required(), otherwise: Joi.forbidden() }),
+  rollNumber: Joi.string().when('role', { is: 'student', then: Joi.required(), otherwise: Joi.optional() })
 });
 
 
@@ -20,11 +21,40 @@ async function register(req, res, next) {
     const { error, value } = registerSchema.validate(req.body);
     if (error) return res.status(400).json({ success: false, message: 'Validation error', errors: error.details });
 
-    const { name, email, password, role, collegeId, collegeName, collegeCode } = value;
+    const { name, email, password, role, collegeId, collegeName, collegeCode, rollNumber } = value;
     const exists = await User.findOne({ where: { email } });
     if (exists) return res.status(409).json({ success: false, message: 'Email already registered' });
 
     let finalCollegeId = collegeId;
+
+    // Student Registration Logic
+    if (role === 'student') {
+      if (!collegeId) return res.status(400).json({ success: false, message: 'College selection is required for students' });
+
+      const { AllowedStudent } = require('../models');
+
+      // Check whitelist
+      const allowed = await AllowedStudent.findOne({
+        where: {
+          collegeId,
+          email,
+          rollNumber
+        }
+      });
+
+      if (!allowed) {
+        return res.status(403).json({
+          success: false,
+          message: 'Registration not allowed. Your details (Email + Roll Number) do not match any pre-approved student record for this college.'
+        });
+      }
+
+      if (allowed.isRegistered) {
+        return res.status(409).json({ success: false, message: 'This student record has already been registered.' });
+      }
+
+      // Mark as registered later after successful user creation
+    }
 
     // If TPO, create a new college
     if (role === 'tpo') {
@@ -62,7 +92,15 @@ async function register(req, res, next) {
     const passwordHash = await hashPassword(password);
     const status = role === 'student' ? 'active' : 'pending';
 
-    const user = await User.create({ name, email, passwordHash, role, status, collegeId: finalCollegeId || null });
+    const user = await User.create({ name, email, passwordHash, role, status, collegeId: finalCollegeId || null, rollNumber: rollNumber || null });
+
+    // If student, mark as registered
+    if (role === 'student') {
+      const { AllowedStudent } = require('../models');
+      await AllowedStudent.update({ isRegistered: true }, {
+        where: { collegeId: finalCollegeId, email, rollNumber }
+      });
+    }
 
     return res.status(201).json({ success: true, message: 'Registered', data: { id: user.id, status: user.status } });
   } catch (err) {

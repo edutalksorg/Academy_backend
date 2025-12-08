@@ -13,10 +13,14 @@ async function getStats(req, res, next) {
 
         let avgScore = 0;
         if (completedTests > 0) {
-            const totalScore = attempts
+            const totalPercentage = attempts
                 .filter(a => a.status === 'completed')
-                .reduce((sum, a) => sum + (a.totalScore || 0), 0);
-            avgScore = totalScore / completedTests;
+                .reduce((sum, a) => {
+                    const totalMarks = a.Test?.totalMarks || 100;
+                    const percentage = (a.totalScore / totalMarks) * 100;
+                    return sum + percentage;
+                }, 0);
+            avgScore = totalPercentage / completedTests;
         }
 
         // Get available tests count (Total Active Tests)
