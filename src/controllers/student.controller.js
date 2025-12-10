@@ -16,8 +16,8 @@ async function getStats(req, res, next) {
             const totalPercentage = attempts
                 .filter(a => a.status === 'completed')
                 .reduce((sum, a) => {
-                    const totalMarks = a.Test?.totalMarks || 100;
-                    const percentage = (a.totalScore / totalMarks) * 100;
+                    const totalMaxScore = a.Test?.Questions?.length || a.Test?.totalMarks || 1;
+                    const percentage = (a.totalScore / totalMaxScore) * 100;
                     return sum + percentage;
                 }, 0);
             avgScore = totalPercentage / completedTests;

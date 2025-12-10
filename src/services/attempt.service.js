@@ -29,7 +29,7 @@ async function submitAttempt(attemptId, answers) {
       const selected = ans.selectedOptionId ? await Option.findByPk(ans.selectedOptionId, { transaction: t }) : null;
       const correctOption = q.Options.find(opt => opt.isCorrect);
       const isCorrect = selected ? !!selected.isCorrect : false;
-      const marksAwarded = isCorrect ? q.marks : 0;
+      const marksAwarded = isCorrect ? (q.marks || 1) : 0;
       total += marksAwarded;
 
       if (isCorrect) {
@@ -72,7 +72,16 @@ async function submitAttempt(attemptId, answers) {
 }
 
 async function getAttemptsByUser(userId, { limit = 50, offset = 0 } = {}) {
-  return Attempt.findAndCountAll({ where: { userId }, limit, offset, include: [Test] });
+  return Attempt.findAndCountAll({
+    where: { userId },
+    limit,
+    offset,
+    include: [{
+      model: Test,
+      include: [{ model: Question }] // Include questions to calculate total valid score
+    }],
+    order: [['createdAt', 'DESC']]
+  });
 }
 
 async function getResultsByTest(testId) {
