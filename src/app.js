@@ -14,7 +14,7 @@ app.use(helmet());
 app.use(cors({
     origin: [
         "https://d3te24boxizt5g.cloudfront.net",   // your frontend
-        "http://localhost:5173"                    // dev (optional)
+        //"http://localhost:5173"                    // dev (optional)
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
