@@ -9,7 +9,18 @@ const logger = require('./config/logger');
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+
+// ⭐ IMPORTANT: Replace default CORS with specific allowed origins
+app.use(cors({
+    origin: [
+        "https://d3te24boxizt5g.cloudfront.net",   // your frontend
+        "http://localhost:5173"                    // dev (optional)
+    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(rateLimiter);
