@@ -13,8 +13,8 @@ app.use(helmet());
 // ⭐ IMPORTANT: Replace default CORS with specific allowed origins
 app.use(cors({
     origin: [
-        "https://d3te24boxizt5g.cloudfront.net",   // your frontend
-        //"http://localhost:5173"                    // dev (optional)
+        "https://d3te24boxizt5g.cloudfront.net",
+        "http://localhost:5173"
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
