@@ -18,6 +18,16 @@ async function approveUser(id) {
   if (!user) throw { status: 404, message: 'User not found' };
   user.status = 'active';
   await user.save();
+
+  // Send email notification to user for instructor/TPO approval
+  if (user.role === 'instructor' || user.role === 'tpo') {
+    const emailService = require('./email.service');
+
+    // Send notification (non-blocking - don't wait for email to complete)
+    emailService.sendApprovalNotificationToUser(user)
+      .catch(err => console.error('Approval email notification failed:', err.message));
+  }
+
   return user;
 }
 

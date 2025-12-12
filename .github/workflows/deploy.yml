@@ -24,26 +24,35 @@ jobs:
           VERSION="v1.0.$(git rev-list --count HEAD)_$(date +'%Y-%m-%dT%H-%M-%S')"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated version: $VERSION"
+
       - name: Install dependencies
         run: npm install
 
       - name: Create .env file
         run: |
-          echo "PORT=${{ secrets.SERVER_PORT }}" > .env
-          echo "NODE_ENV=production" >> .env
-          echo "DB_HOST=${{ secrets.RDS_HOST }}" >> .env
-          echo "DB_PORT=${{ secrets.RDS_PORT }}" >> .env
-          echo "DB_NAME=${{ secrets.RDS_DB_NAME }}" >> .env
-          echo "DB_USER=${{ secrets.RDS_USER }}" >> .env
-          echo "DB_PASS=${{ secrets.RDS_PASSWORD }}" >> .env
+          echo "PORT=4000" > .env
+          echo "NODE_ENV=development" >> .env
+          echo "DB_HOST=localhost" >> .env
+          echo "DB_PORT=3306" >> .env
+          echo "DB_NAME=placement_db" >> .env
+          echo "DB_USER=root" >> .env
+          echo "DB_PASS=root" >> .env
           echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
           echo "JWT_EXPIRES_IN=1h" >> .env
+          echo "SMTP_HOST=smtp.gmail.com" >> .env
+          echo "SMTP_PORT=587" >> .env
+          echo "SMTP_USER=${{ secrets.SMTP_USER }}" >> .env
+          echo "SMTP_PASS=${{ secrets.SMTP_PASS }}" >> .env
+          echo "SMTP_FROM=Academy Platform <noreply@academy.com>" >> .env
+          echo "SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}" >> .en
           echo "SEED=true" >> .env
+
       - name: Create versioned ZIP
         run: |
           ZIP_NAME="backend_${{ steps.version.outputs.version }}.zip"
           zip -r "$ZIP_NAME" . -x ".git/*"
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -71,17 +80,23 @@ jobs:
             DEPLOY_DIR="$BASE_DIR/deployments"
             RELEASE_DIR="$BASE_DIR/releases/$VERSION"
             ZIP_FILE="backend_${{ steps.version.outputs.version }}.zip"
+
             echo "Creating release directory: $RELEASE_DIR"
             mkdir -p "$RELEASE_DIR"
+
             echo "Unzipping release..."
             unzip -o "$DEPLOY_DIR/$ZIP_FILE" -d "$RELEASE_DIR"
+
             echo "Installing production dependencies..."
             cd "$RELEASE_DIR"
             npm install --production
+
             echo "Updating current symlink..."
             ln -sfn "$RELEASE_DIR" "$BASE_DIR/current"
+
             echo "Restarting PM2..."
             cd "$BASE_DIR/current"
             pm2 restart backend || pm2 start src/server.js --name backend
             pm2 save
+
             echo "Deployment completed successfully for version: $VERSION"

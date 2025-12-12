@@ -102,6 +102,22 @@ async function register(req, res, next) {
       });
     }
 
+    // Send email notification to superadmin for instructor/TPO registration
+    if (role === 'instructor' || role === 'tpo') {
+      const emailService = require('../services/email.service');
+
+      // Get college info for TPO
+      let collegeInfo = null;
+      if (role === 'tpo' && finalCollegeId) {
+        const { College } = require('../models');
+        collegeInfo = await College.findByPk(finalCollegeId);
+      }
+
+      // Send notification (non-blocking - don't wait for email to complete)
+      emailService.sendRegistrationNotificationToAdmin(user, collegeInfo)
+        .catch(err => console.error('Email notification failed:', err.message));
+    }
+
     return res.status(201).json({ success: true, message: 'Registered', data: { id: user.id, status: user.status } });
   } catch (err) {
     next(err);
