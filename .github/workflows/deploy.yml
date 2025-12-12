@@ -44,7 +44,7 @@ jobs:
           echo "SMTP_USER=${{ secrets.SMTP_USER }}" >> .env
           echo "SMTP_PASS=${{ secrets.SMTP_PASS }}" >> .env
           echo "SMTP_FROM=Academy Platform <noreply@academy.com>" >> .env
-          echo "SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}" >> .en
+          echo "SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}" >> .env
           echo "SEED=true" >> .env
 
       - name: Create versioned ZIP
