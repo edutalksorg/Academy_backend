@@ -4,6 +4,8 @@ module.exports = (sequelize, DataTypes) => {
     attemptId: { type: DataTypes.INTEGER, allowNull: false },
     questionId: { type: DataTypes.INTEGER, allowNull: false },
     selectedOptionId: { type: DataTypes.INTEGER, allowNull: true },
+    answerText: { type: DataTypes.TEXT, allowNull: true }, // For Coding/Text questions
+    language: { type: DataTypes.STRING, allowNull: true, defaultValue: 'javascript' },
     isCorrect: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: null },
     marksAwarded: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 }
   }, {

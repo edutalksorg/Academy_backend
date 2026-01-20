@@ -11,7 +11,7 @@ async function start(req, res, next) {
 async function submit(req, res, next) {
   try {
     const attemptId = parseInt(req.params.attemptId, 10);
-    const { answers } = req.body; // [{questionId, selectedOptionId}, ...]
+    const { answers } = req.body; // [{questionId, selectedOptionId, answerText}, ...]
     const result = await attemptService.submitAttempt(attemptId, answers || []);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

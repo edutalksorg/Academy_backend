@@ -25,11 +25,40 @@ const createTestSchema = Joi.object({
     startTime: Joi.date().allow(null),
     endTime: Joi.date().allow(null)
 });
-const addQuestionSchema = Joi.object({ questionText: Joi.string().required(), marks: Joi.number().integer().min(0).default(1), options: Joi.array().items(Joi.object({ text: Joi.string().required(), isCorrect: Joi.boolean().default(false) })).min(2).required() });
+const addQuestionSchema = Joi.object({
+    questionText: Joi.string().required(),
+    marks: Joi.number().integer().min(0).default(1),
+    type: Joi.string().valid('MCQ', 'CODING').default('MCQ'),
+    // MCQ fields
+    options: Joi.array().items(Joi.object({
+        text: Joi.string().required(),
+        isCorrect: Joi.boolean().default(false)
+    })).when('type', {
+        is: 'MCQ',
+        then: Joi.array().min(2).required(),
+        otherwise: Joi.optional()
+    }),
+    // Coding fields
+    description: Joi.string().allow('', null),
+    constraints: Joi.string().allow('', null),
+    codeTemplate: Joi.string().allow('', null),
+    language: Joi.string().default('javascript'),
+    testCases: Joi.array().items(Joi.object({
+        input: Joi.string().allow('', null),
+        expectedOutput: Joi.string().allow('', null),
+        explanation: Joi.string().allow('', null),
+        isPublic: Joi.boolean().default(false)
+    })).when('type', {
+        is: 'CODING',
+        then: Joi.array().required(),
+        otherwise: Joi.optional()
+    })
+});
 
 router.post('/', validateBody(createTestSchema), testController.createTest);
 router.put('/:id', testController.updateTest);
 router.delete('/:id', testController.deleteTest);
+router.delete('/questions/:questionId', testController.deleteQuestion);
 router.post('/:testId/questions', validateBody(addQuestionSchema), testController.addQuestion);
 
 module.exports = router;

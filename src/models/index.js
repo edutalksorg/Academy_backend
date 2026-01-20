@@ -37,6 +37,7 @@ db.Attempt = require('./attempt.model')(sequelize, DataTypes);
 db.AttemptAnswer = require('./attemptAnswer.model')(sequelize, DataTypes);
 db.ActivityLog = require('./activityLog.model')(sequelize, DataTypes);
 db.AllowedStudent = require('./allowedStudent.model')(sequelize, DataTypes);
+db.TestCase = require('./testCase.model')(sequelize, DataTypes);
 
 // Associations
 db.College.hasMany(db.User, { foreignKey: 'collegeId' });
@@ -53,6 +54,9 @@ db.Question.belongsTo(db.Test, { foreignKey: 'testId' });
 
 db.Question.hasMany(db.Option, { foreignKey: 'questionId', onDelete: 'cascade' });
 db.Option.belongsTo(db.Question, { foreignKey: 'questionId' });
+
+db.Question.hasMany(db.TestCase, { foreignKey: 'questionId', onDelete: 'cascade' });
+db.TestCase.belongsTo(db.Question, { foreignKey: 'questionId' });
 
 db.Test.hasMany(db.Attempt, { foreignKey: 'testId' });
 db.Attempt.belongsTo(db.Test, { foreignKey: 'testId' });

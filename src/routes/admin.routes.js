@@ -12,5 +12,6 @@ router.post('/approve-user/:id', adminController.approveUser);
 
 router.get('/tpo-activity', adminController.getTpoActivity);
 router.get('/instructor-data', adminController.getInstructorData);
+router.delete('/users/:id', adminController.deleteUser);
 
 module.exports = router;

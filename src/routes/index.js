@@ -10,6 +10,7 @@ router.use('/tpo', require('./tpo.routes'));
 router.use('/student', require('./student.routes'));
 router.use('/instructor', require('./instructor.routes'));
 router.use('/colleges', require('./college.routes'));
+router.use('/submissions', require('./submission.routes'));
 
 module.exports = router;
 

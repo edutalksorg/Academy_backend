@@ -140,6 +140,7 @@ async function login(req, res, next) {
     if (user.status !== 'active') return res.status(403).json({ success: false, message: 'Account not active' });
 
     const token = sign({ id: user.id, role: user.role });
+    const refreshToken = require('../utils/jwt').signRefreshToken({ id: user.id });
 
     // Log activity (with deduplication to prevent double-logging from React StrictMode)
     const { ActivityLog } = require('../models');
@@ -158,7 +159,7 @@ async function login(req, res, next) {
       await ActivityLog.create({ userId: user.id, action: 'LOGIN' });
     }
 
-    return res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } } });
+    return res.json({ success: true, data: { token, refreshToken, user: { id: user.id, name: user.name, email: user.email, role: user.role } } });
   } catch (err) {
     next(err);
   }
@@ -189,4 +190,33 @@ async function logout(req, res, next) {
   }
 }
 
-module.exports = { register, login, logout };
+async function refreshToken(req, res, next) {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ success: false, message: 'Refresh token required' });
+
+    // Verify token
+    let payload;
+    try {
+      payload = require('../utils/jwt').verify(token);
+    } catch (e) {
+      return res.status(401).json({ success: false, message: 'Invalid or expired refresh token' });
+    }
+
+    const user = await User.findByPk(payload.id);
+    if (!user || user.status !== 'active') {
+      return res.status(401).json({ success: false, message: 'User not found or inactive' });
+    }
+
+    // Issue new access token
+    const newAccessToken = sign({ id: user.id, role: user.role });
+
+    // Optionally rotate refresh token here if desired, but for now just return new access token
+    const newRefreshToken = require('../utils/jwt').signRefreshToken({ id: user.id });
+    return res.json({ success: true, data: { token: newAccessToken, refreshToken: newRefreshToken } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, logout, refreshToken };

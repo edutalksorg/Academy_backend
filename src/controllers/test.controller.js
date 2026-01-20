@@ -25,12 +25,23 @@ async function deleteTest(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function deleteQuestion(req, res, next) {
+  try {
+    const id = parseInt(req.params.questionId, 10);
+    await testService.deleteQuestion(id);
+    res.json({ success: true, message: 'Question deleted' });
+  } catch (err) { next(err); }
+}
+
 async function addQuestion(req, res, next) {
   try {
     const testId = parseInt(req.params.testId, 10);
     const body = req.validatedBody || req.body;
-    const { questionText, options, marks } = body;
-    const q = await testService.addQuestionWithOptions(testId, { text: questionText, marks: marks || 1, options });
+    const { questionText, options, marks, type, description, constraints, codeTemplate, language, testCases } = body;
+    const q = await testService.addQuestionWithOptions(testId, {
+      text: questionText, marks: marks || 1, options,
+      type, description, constraints, codeTemplate, language, testCases
+    });
     res.status(201).json({ success: true, data: q });
   } catch (err) { next(err); }
 }
@@ -59,4 +70,4 @@ async function listMyTests(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { createTest, updateTest, deleteTest, addQuestion, getTest, listPublished, listMyTests };
+module.exports = { createTest, updateTest, deleteTest, deleteQuestion, addQuestion, getTest, listPublished, listMyTests };

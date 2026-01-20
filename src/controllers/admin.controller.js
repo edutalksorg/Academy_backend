@@ -111,4 +111,12 @@ async function getInstructorData(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { getPendingUsers, approveUser, getStats, getTpoActivity, getInstructorData };
+async function deleteUser(req, res, next) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const result = await userService.deleteUser(id);
+    res.json({ success: true, message: result.message });
+  } catch (err) { next(err); }
+}
+
+module.exports = { getPendingUsers, approveUser, getStats, getTpoActivity, getInstructorData, deleteUser };

@@ -1,4 +1,4 @@
-const { Test, Question, Option, Attempt } = require('../models');
+const { Test, Question, Option, Attempt, TestCase } = require('../models');
 const { Op } = require('sequelize');
 
 async function createTest({ title, description, instructorId, collegeId, timeLimit, status = 'draft', startTime, endTime }) {
@@ -20,15 +20,38 @@ async function deleteTest(id) {
   return true;
 }
 
-async function addQuestionWithOptions(testId, { text, marks, options }) {
-  const q = await Question.create({ testId, text, marks });
-  const opts = options.map(o => ({ questionId: q.id, text: o.text, isCorrect: !!o.isCorrect }));
-  await Option.bulkCreate(opts);
-  return await Question.findByPk(q.id, { include: [Option] });
+async function deleteQuestion(questionId) {
+  const q = await Question.findByPk(questionId);
+  if (!q) throw { status: 404, message: 'Question not found' };
+  await q.destroy();
+  return true;
+}
+
+async function addQuestionWithOptions(testId, { text, marks, options, type, description, constraints, codeTemplate, language, testCases }) {
+  const q = await Question.create({
+    testId, text, marks, type, description, constraints, codeTemplate, language
+  });
+
+  if (type === 'CODING' && testCases && testCases.length > 0) {
+    const tcs = testCases.map(tc => ({ questionId: q.id, input: tc.input, expectedOutput: tc.expectedOutput, isPublic: !!tc.isPublic }));
+    await TestCase.bulkCreate(tcs);
+  } else if (options && options.length > 0) {
+    const opts = options.map(o => ({ questionId: q.id, text: o.text, isCorrect: !!o.isCorrect }));
+    await Option.bulkCreate(opts);
+  }
+
+  // Update Test totalMarks
+  const test = await Test.findByPk(testId);
+  if (test) {
+    test.totalMarks = (test.totalMarks || 0) + (marks || 1);
+    await test.save();
+  }
+
+  return await Question.findByPk(q.id, { include: [Option, TestCase] });
 }
 
 async function getTestWithQuestions(id) {
-  return Test.findByPk(id, { include: [{ model: Question, include: [Option] }] });
+  return Test.findByPk(id, { include: [{ model: Question, include: [Option, TestCase] }] });
 }
 
 async function listPublishedTests({ collegeId, q, limit = 50, offset = 0, userId } = {}) {
@@ -64,14 +87,14 @@ async function listPublishedTests({ collegeId, q, limit = 50, offset = 0, userId
       }
     ];
   }
-  return Test.findAndCountAll({ where, limit, offset, include: [{ model: Question, include: [Option] }] });
+  return Test.findAndCountAll({ where, limit, offset, include: [{ model: Question, include: [Option, TestCase] }] });
 }
 
 async function listTestsByInstructor(instructorId) {
   return Test.findAll({
     where: { instructorId },
     order: [['createdAt', 'DESC']],
-    include: [{ model: Question }]
+    include: [{ model: Question, include: [Option, TestCase] }]
   });
 }
 
@@ -91,4 +114,4 @@ async function getPublishedTestIds({ collegeId } = {}) {
   });
 }
 
-module.exports = { createTest, updateTest, deleteTest, addQuestionWithOptions, getTestWithQuestions, listPublishedTests, listTestsByInstructor, getPublishedTestIds };
+module.exports = { createTest, updateTest, deleteTest, deleteQuestion, addQuestionWithOptions, getTestWithQuestions, listPublishedTests, listTestsByInstructor, getPublishedTestIds };

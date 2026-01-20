@@ -9,7 +9,8 @@ async function start() {
   try {
     await sequelize.authenticate();
     // Sync models (use migrations in production)
-    await sequelize.sync();
+    // Using alter: true can cause issues with existing columns; disabling to fix crash
+    await sequelize.sync({ alter: false });
     logger.info('Database connected and models synced');
 
     if (process.env.SEED === 'true') {

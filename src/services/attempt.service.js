@@ -1,4 +1,5 @@
 const { Attempt, AttemptAnswer, Question, Option, Test, sequelize } = require('../models');
+const submissionService = require('./submission.service');
 
 async function startAttempt(testId, userId, timeLimitMinutes) {
   const startedAt = new Date();
@@ -26,10 +27,56 @@ async function submitAttempt(attemptId, answers) {
         include: [Option],
         transaction: t
       });
-      const selected = ans.selectedOptionId ? await Option.findByPk(ans.selectedOptionId, { transaction: t }) : null;
-      const correctOption = q.Options.find(opt => opt.isCorrect);
-      const isCorrect = selected ? !!selected.isCorrect : false;
-      const marksAwarded = isCorrect ? (q.marks || 1) : 0;
+
+      let isCorrect = false;
+      let marksAwarded = 0;
+      let selectedOptionId = null;
+      let answerText = null;
+
+      if (q.type === 'CODING') {
+        answerText = ans.answerText || '';
+        const language = ans.language || 'javascript'; // Get language from payload
+
+        if (answerText.trim()) {
+          try {
+            const gradeResult = await submissionService.submitSolution({
+              questionId: q.id,
+              code: answerText,
+              language
+            });
+
+            // Partial Marking Logic
+            if (gradeResult.results && gradeResult.results.length > 0) {
+              const passedCount = gradeResult.results.filter(r => r.passed).length;
+              const totalCases = gradeResult.results.length;
+              marksAwarded = Math.floor((passedCount / totalCases) * (q.marks || 1));
+              isCorrect = gradeResult.allPassed;
+            } else {
+              isCorrect = false;
+              marksAwarded = 0;
+            }
+
+          } catch (err) {
+            console.error(`Auto-grading failed for Q${q.id}:`, err);
+            isCorrect = false;
+            marksAwarded = 0;
+          }
+        } else {
+          // If no code is provided, it's incorrect and 0 marks
+          isCorrect = false;
+          marksAwarded = 0;
+        }
+      }
+      // marksAwarded is already set above for CODING
+      else {
+        selectedOptionId = ans.selectedOptionId ? ans.selectedOptionId : null;
+        if (selectedOptionId) {
+          const selected = await Option.findByPk(selectedOptionId, { transaction: t });
+          isCorrect = selected ? !!selected.isCorrect : false;
+        }
+        marksAwarded = isCorrect ? (q.marks || 1) : 0;
+      }
+
       total += marksAwarded;
 
       if (isCorrect) {
@@ -42,18 +89,29 @@ async function submitAttempt(attemptId, answers) {
       questionResults.push({
         questionId: q.id,
         questionText: q.text,
-        options: q.Options.map(opt => ({
+        options: q.Options ? q.Options.map(opt => ({
           id: opt.id,
           text: opt.text,
           isCorrect: opt.isCorrect
-        })),
-        selectedOptionId: ans.selectedOptionId || null,
-        correctOptionId: correctOption ? correctOption.id : null,
+        })) : [],
+        leadingOptionId: selectedOptionId,
+        selectedOptionId,
+        answerText,
+        language: q.type === 'CODING' ? (ans.language || 'javascript') : null, // Pass back in results
+        correctOptionId: q.type === 'MCQ' ? q.Options.find(opt => opt.isCorrect)?.id : null,
         isCorrect,
         marksAwarded
       });
 
-      await AttemptAnswer.create({ attemptId, questionId: q.id, selectedOptionId: ans.selectedOptionId || null, isCorrect, marksAwarded }, { transaction: t });
+      await AttemptAnswer.create({
+        attemptId,
+        questionId: q.id,
+        selectedOptionId,
+        answerText,
+        language: q.type === 'CODING' ? (ans.language || 'javascript') : null, // Save to DB
+        isCorrect,
+        marksAwarded
+      }, { transaction: t });
     }
 
     attempt.totalScore = total;

@@ -59,7 +59,7 @@ async function findStudentsByCollege(collegeId, { limit = 20, offset = 0 } = {})
 }
 
 async function getCollegeStats(collegeId) {
-  const { College, Test, Attempt } = require('../models');
+  const { College, Test, Attempt, Question } = require('../models');
 
   // 1. College Info
   const college = await College.findByPk(collegeId);
@@ -69,7 +69,6 @@ async function getCollegeStats(collegeId) {
   const totalInstructors = await User.count({ where: { collegeId, role: 'instructor' } });
 
   // 3. Tests created by instructors of this college
-  // First find all instructor IDs
   const instructors = await User.findAll({
     where: { collegeId, role: 'instructor' },
     attributes: ['id']
@@ -78,28 +77,48 @@ async function getCollegeStats(collegeId) {
 
   let activeTests = 0;
   let testsCreated = 0;
+  let instructorTests = [];
 
   if (instructorIds.length > 0) {
     activeTests = await Test.count({ where: { instructorId: { [Op.in]: instructorIds }, status: 'published' } });
     testsCreated = await Test.count({ where: { instructorId: { [Op.in]: instructorIds } } });
+
+    // Fetch tests to get totalMarks
+    instructorTests = await Test.findAll({
+      where: { instructorId: { [Op.in]: instructorIds } },
+      attributes: ['id', 'totalMarks'],
+      include: [{
+        model: Question,
+        attributes: ['marks']
+      }]
+    });
   }
 
+  // Create map for test total marks
+  const testMap = {};
+  instructorTests.forEach(t => {
+    let calculatedMarks = t.totalMarks;
+    if (!calculatedMarks || calculatedMarks === 0) {
+      calculatedMarks = t.Questions?.reduce((sum, q) => sum + (q.marks || 1), 0) || 100;
+    }
+    testMap[t.id] = calculatedMarks > 0 ? calculatedMarks : 100;
+  });
+
   // 4. Attempts & Scores
-  // Find all students of this college
   const students = await User.findAll({
     where: { collegeId, role: 'student' },
     attributes: ['id'],
     include: [{
       model: Attempt,
-      attributes: ['totalScore'],
+      attributes: ['totalScore', 'testId'],
       required: false
     }]
   });
 
   let totalAttempts = 0;
-  let totalScoreSum = 0;
+  let totalScoreSum = 0; // Sum of percentages
   let highPerformers = 0; // >= 80%
-  let mediumPerformers = 0; // 50-79%
+  let mediumPerformers = 0; // 50-79% (User requested 50-80 range)
   let lowPerformers = 0; // < 50%
 
   students.forEach(student => {
@@ -107,9 +126,13 @@ async function getCollegeStats(collegeId) {
     totalAttempts += attempts.length;
 
     if (attempts.length > 0) {
-      const studentTotal = attempts.reduce((sum, a) => sum + (a.totalScore || 0), 0);
-      const studentAvg = studentTotal / attempts.length;
-      totalScoreSum += studentAvg; // Sum of averages for overall average
+      const studentPercentages = attempts.map(a => {
+        const totalMarks = testMap[a.testId] || 100; // Default to 100 if test not found (e.g. deleted)
+        return (a.totalScore / totalMarks) * 100;
+      });
+
+      const studentAvg = studentPercentages.reduce((sum, p) => sum + p, 0) / studentPercentages.length;
+      totalScoreSum += studentAvg;
 
       if (studentAvg >= 80) highPerformers++;
       else if (studentAvg >= 50) mediumPerformers++;
@@ -117,12 +140,19 @@ async function getCollegeStats(collegeId) {
     }
   });
 
-  const avgScore = students.length > 0 && totalAttempts > 0 ? (totalScoreSum / students.filter(s => s.Attempts?.length > 0).length) : 0;
+  // Avg Score (Average of student averages)
+  const studentsWithAttempts = students.filter(s => s.Attempts?.length > 0).length;
+  const avgScore = studentsWithAttempts > 0 ? (totalScoreSum / studentsWithAttempts) : 0;
 
-  // Completion rate (rough estimate: attempts / (students * active_tests))
-  // Avoid division by zero
+  // Completion rate: (total_attempts_by_students) / (total_students * active_tests)
+  // Only count attempts on currently active tests for accuracy? 
+  // For simplicity and consistency with previous logic, we use totalAttempts on *published* tests
+
+  // Refined Completion Rate:
+  // Count unique tests attempted by each student vs active tests? 
+  // Let's stick to the previous formula but ensure safeguards
   const possibleAttempts = totalStudents * activeTests;
-  const completionRate = possibleAttempts > 0 ? (totalAttempts / possibleAttempts) * 100 : 0;
+  const completionRate = possibleAttempts > 0 ? Math.min((totalAttempts / possibleAttempts) * 100, 100) : 0;
 
   return {
     collegeName: college?.name,
@@ -155,12 +185,11 @@ async function getCollegeReport(collegeId, { dateFrom, dateTo } = {}) {
     } else if (dateTo) {
       attemptWhere.createdAt = { [Op.lte]: new Date(dateTo + 'T23:59:59.999Z') };
     }
-    console.log('Attempt where clause:', attemptWhere);
 
     // 1. Total Students
     const totalStudents = await User.count({ where: { collegeId, role: 'student' } });
 
-    // 2. Get all students with their attempts within date range
+    // 2. Get students with attempts
     const students = await User.findAll({
       where: { collegeId, role: 'student' },
       attributes: ['id'],
@@ -168,13 +197,41 @@ async function getCollegeReport(collegeId, { dateFrom, dateTo } = {}) {
         model: Attempt,
         as: 'Attempts',
         where: attemptWhere,
-        required: false, // Include students even if they have no attempts in range
-        include: [{
-          model: Test,
-          attributes: ['title', 'totalMarks'] // Include totalMarks to calculate percentage
-        }]
+        required: false,
+        attributes: ['id', 'totalScore', 'testId', 'createdAt']
       }]
     });
+
+    // 3. Fetch Test Details (Total Marks Correction)
+    // Extract all unique test IDs from attempts
+    const testIds = new Set();
+    students.forEach(s => {
+      if (s.Attempts) s.Attempts.forEach(a => testIds.add(a.testId));
+    });
+
+    const testMap = {}; // testId -> { title, totalMarks }
+    if (testIds.size > 0) {
+      const tests = await Test.findAll({
+        where: { id: { [Op.in]: Array.from(testIds) } },
+        attributes: ['id', 'title', 'totalMarks'],
+        include: [{
+          model: Question,
+          attributes: ['marks']
+        }]
+      });
+
+      tests.forEach(t => {
+        // Calculate total marks from questions if test.totalMarks is 0 or missing
+        let calculatedMarks = t.totalMarks;
+        if (!calculatedMarks || calculatedMarks === 0) {
+          calculatedMarks = t.Questions?.reduce((sum, q) => sum + (q.marks || 1), 0) || 100;
+        }
+        testMap[t.id] = {
+          title: t.title,
+          totalMarks: calculatedMarks > 0 ? calculatedMarks : 100
+        };
+      });
+    }
 
     let totalTests = 0;
     let totalScoreSum = 0;
@@ -185,19 +242,20 @@ async function getCollegeReport(collegeId, { dateFrom, dateTo } = {}) {
     let average = 0; // 40-60%
     let belowAverage = 0; // <40%
 
-    // Test-wise stats aggregation
-    const testMap = {};
+    const testStatsMap = {};
 
     students.forEach(student => {
       const attempts = student.Attempts || [];
 
-      // Calculate student average for performance breakdown
+      // Performance Breakdown (Student Level)
       if (attempts.length > 0) {
-        const studentScores = attempts.map(a => {
-          const totalMarks = a.Test?.totalMarks || 100;
+        const studentPercentages = attempts.map(a => {
+          const testInfo = testMap[a.testId];
+          const totalMarks = testInfo?.totalMarks || 100;
           return (a.totalScore / totalMarks) * 100;
         });
-        const studentAvg = studentScores.reduce((sum, score) => sum + score, 0) / studentScores.length;
+
+        const studentAvg = studentPercentages.reduce((sum, p) => sum + p, 0) / studentPercentages.length;
 
         if (studentAvg >= 80) excellent++;
         else if (studentAvg >= 60) good++;
@@ -205,40 +263,36 @@ async function getCollegeReport(collegeId, { dateFrom, dateTo } = {}) {
         else belowAverage++;
       }
 
+      // Aggregate Global Stats
       attempts.forEach(attempt => {
+        const testInfo = testMap[attempt.testId];
+        if (!testInfo) return; // Should not happen
+
         totalTests++;
 
-        // Convert raw score to percentage
-        const totalMarks = attempt.Test?.totalMarks || 100;
+        const totalMarks = testInfo.totalMarks;
         const scorePercentage = (attempt.totalScore / totalMarks) * 100;
         totalScoreSum += scorePercentage;
 
-        // Check pass/fail - using default passing score of 40%
-        if (scorePercentage >= 40) {
-          passedTests++;
-        }
+        if (scorePercentage >= 40) passedTests++;
 
-        // Aggregate test-wise stats
-        if (attempt.Test) {
-          const testName = attempt.Test.title;
-          if (!testMap[testName]) {
-            testMap[testName] = { testName, attempts: 0, totalScore: 0 };
-          }
-          testMap[testName].attempts++;
-          testMap[testName].totalScore += scorePercentage;
+        // Test-wise stats
+        if (!testStatsMap[testInfo.title]) {
+          testStatsMap[testInfo.title] = { testName: testInfo.title, attempts: 0, totalPercentage: 0 };
         }
+        testStatsMap[testInfo.title].attempts++;
+        testStatsMap[testInfo.title].totalPercentage += scorePercentage;
       });
     });
 
     const avgScore = totalTests > 0 ? totalScoreSum / totalTests : 0;
     const passRate = totalTests > 0 ? (passedTests / totalTests) * 100 : 0;
 
-    // Format test stats
-    const testStats = Object.values(testMap).map(t => ({
+    const testStats = Object.values(testStatsMap).map(t => ({
       testName: t.testName,
       attempts: t.attempts,
-      avgScore: t.attempts > 0 ? t.totalScore / t.attempts : 0
-    })).sort((a, b) => b.attempts - a.attempts); // Sort by most attempted
+      avgScore: t.attempts > 0 ? t.totalPercentage / t.attempts : 0
+    })).sort((a, b) => b.attempts - a.attempts);
 
     return {
       totalStudents,
@@ -251,10 +305,19 @@ async function getCollegeReport(collegeId, { dateFrom, dateTo } = {}) {
       belowAverage,
       testStats
     };
+
   } catch (error) {
     console.error('Error in getCollegeReport:', error);
     throw error;
   }
 }
 
-module.exports = { getPendingUsers, approveUser, findById, findStudentsByCollege, getCollegeStats, getCollegeReport };
+async function deleteUser(id) {
+  const user = await User.findByPk(id);
+  if (!user) throw { status: 404, message: 'User not found' };
+
+  await user.destroy();
+  return { message: 'User deleted successfully' };
+}
+
+module.exports = { getPendingUsers, approveUser, findById, findStudentsByCollege, getCollegeStats, getCollegeReport, deleteUser };
