@@ -10,14 +10,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ---------------------------
+      # Checkout source code
+      # ---------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ---------------------------
+      # Setup Node.js
+      # ---------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
+      # ---------------------------
+      # Generate version tag
+      # ---------------------------
       - name: Generate version tag
         id: version
         run: |
@@ -25,40 +34,39 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated version: $VERSION"
 
+      # ---------------------------
+      # Install dependencies (CI only)
+      # ---------------------------
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Create .env file
-        run: |
-          echo "PORT=4000" > .env
-          echo "NODE_ENV=development" >> .env
-          echo "DB_HOST=localhost" >> .env
-          echo "DB_PORT=3306" >> .env
-          echo "DB_NAME=placement_db" >> .env
-          echo "DB_USER=root" >> .env
-          echo "DB_PASS=root" >> .env
-          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
-          echo "JWT_EXPIRES_IN=1h" >> .env
-          echo "SMTP_HOST=smtp.gmail.com" >> .env
-          echo "SMTP_PORT=587" >> .env
-          echo "SMTP_USER=${{ secrets.SMTP_USER }}" >> .env
-          echo "SMTP_PASS=${{ secrets.SMTP_PASS }}" >> .env
-          echo "SMTP_FROM=Academy Platform <noreply@academy.com>" >> .env
-          echo "SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}" >> .env
-          echo "SEED=true" >> .env
-
+      # ---------------------------
+      # Create versioned ZIP (CLEAN)
+      # ---------------------------
       - name: Create versioned ZIP
         run: |
           ZIP_NAME="backend_${{ steps.version.outputs.version }}.zip"
-          zip -r "$ZIP_NAME" . -x ".git/*"
+
+          zip -r "$ZIP_NAME" . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "node_modules/*" \
+            -x "*.env"
+
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
+      # ---------------------------
+      # Upload artifact (optional)
+      # ---------------------------
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend_${{ steps.version.outputs.version }}
-          path: backend_${{ steps.version.outputs.version }}.zip
+          path: ${{ env.ZIP_NAME }}
 
+      # ---------------------------
+      # Upload ZIP to EC2
+      # ---------------------------
       - name: Upload ZIP to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -68,6 +76,9 @@ jobs:
           source: ${{ env.ZIP_NAME }}
           target: /home/ubuntu/Academy_backend/deployments
 
+      # ---------------------------
+      # Deploy on EC2 (SAFE + CLEAN)
+      # ---------------------------
       - name: Deploy on Server
         uses: appleboy/ssh-action@v1.1.0
         with:
@@ -75,28 +86,38 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
+
             VERSION="${{ steps.version.outputs.version }}"
             BASE_DIR="/home/ubuntu/Academy_backend"
             DEPLOY_DIR="$BASE_DIR/deployments"
             RELEASE_DIR="$BASE_DIR/releases/$VERSION"
-            ZIP_FILE="backend_${{ steps.version.outputs.version }}.zip"
+            SHARED_DIR="$BASE_DIR/shared"
+            ZIP_FILE="backend_${VERSION}.zip"
 
-            echo "Creating release directory: $RELEASE_DIR"
+            echo "Starting deployment for version: $VERSION"
+
+            # Create required directories
             mkdir -p "$RELEASE_DIR"
+            mkdir -p "$SHARED_DIR"
 
-            echo "Unzipping release..."
-            unzip -o "$DEPLOY_DIR/$ZIP_FILE" -d "$RELEASE_DIR"
+            # Extract new release
+            unzip -q "$DEPLOY_DIR/$ZIP_FILE" -d "$RELEASE_DIR"
 
-            echo "Installing production dependencies..."
+            # Link shared .env
+            ln -sfn "$SHARED_DIR/.env" "$RELEASE_DIR/.env"
+
+            # Install production dependencies
             cd "$RELEASE_DIR"
-            npm install --production
+            npm ci --omit=dev
 
-            echo "Updating current symlink..."
+            # Switch current release
             ln -sfn "$RELEASE_DIR" "$BASE_DIR/current"
 
-            echo "Restarting PM2..."
+            # Restart PM2 CLEANLY
             cd "$BASE_DIR/current"
-            pm2 restart backend || pm2 start src/server.js --name backend
+            pm2 delete backend || true
+            pm2 start src/server.js --name backend --update-env
             pm2 save
 
-            echo "Deployment completed successfully for version: $VERSION"
+            echo "Deployment completed successfully!"
