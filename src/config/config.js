@@ -15,6 +15,7 @@ module.exports = {
       };
     }
 
+
     return {
       host: process.env.DB_HOST,
       port: process.env.DB_PORT || 3306,
