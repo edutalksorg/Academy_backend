@@ -14,6 +14,7 @@ app.use(helmet());
 app.use(cors({
     origin: [
         "https://d3te24boxizt5g.cloudfront.net",
+        "https://exam.eduexam.work.gd",
         "http://localhost:5173"
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
