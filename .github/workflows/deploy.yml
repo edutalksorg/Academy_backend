@@ -1,51 +1,132 @@
-- name: Deploy on Server
-  uses: appleboy/ssh-action@v1.1.0
-  with:
-    host: ${{ secrets.SSH_HOST }}
-    username: ${{ secrets.SSH_USERNAME }}
-    key: ${{ secrets.SSH_PRIVATE_KEY }}
-    script: |
-      set -e
+name: Deploy Backend
 
-      VERSION="${{ steps.version.outputs.version }}"
-      BASE_DIR="/home/ubuntu/Academy_backend"
-      DEPLOY_DIR="$BASE_DIR/deployments"
-      RELEASES_DIR="$BASE_DIR/releases"
-      RELEASE_DIR="$RELEASES_DIR/$VERSION"
-      SHARED_DIR="$BASE_DIR/shared"
-      ZIP_FILE="backend_${VERSION}.zip"
+on:
+  push:
+    branches:
+      - main
 
-      echo "🚀 Deploying version: $VERSION"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-      # Ensure base folders exist
-      mkdir -p "$DEPLOY_DIR" "$RELEASES_DIR" "$SHARED_DIR"
+    steps:
+      # ---------------------------
+      # Checkout repository
+      # ---------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # 🔥 CRITICAL FIX: remove any existing release directory
-      if [ -d "$RELEASE_DIR" ]; then
-        echo "🧹 Removing old release directory"
-        rm -rf "$RELEASE_DIR"
-      fi
+      # ---------------------------
+      # Setup Node.js
+      # ---------------------------
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-      # Create clean release directory
-      mkdir -p "$RELEASE_DIR"
+      # ---------------------------
+      # Generate version tag
+      # ---------------------------
+      - name: Generate version tag
+        id: version
+        run: |
+          VERSION="v1.0.$(git rev-list --count HEAD)_$(date +'%Y-%m-%dT%H-%M-%S')"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
 
-      # Extract fresh code ONLY
-      unzip -q "$DEPLOY_DIR/$ZIP_FILE" -d "$RELEASE_DIR"
+      # ---------------------------
+      # Install dependencies (CI only)
+      # ---------------------------
+      - name: Install dependencies
+        run: npm ci
 
-      # Link shared .env
-      ln -sfn "$SHARED_DIR/.env" "$RELEASE_DIR/.env"
+      # ---------------------------
+      # Create versioned ZIP (CLEAN)
+      # ---------------------------
+      - name: Create versioned ZIP
+        run: |
+          ZIP_NAME="backend_${{ steps.version.outputs.version }}.zip"
 
-      # Install production dependencies
-      cd "$RELEASE_DIR"
-      npm ci --omit=dev
+          zip -r "$ZIP_NAME" . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "node_modules/*" \
+            -x "*.env"
 
-      # Switch current symlink
-      ln -sfn "$RELEASE_DIR" "$BASE_DIR/current"
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
-      # Restart PM2 CLEANLY
-      cd "$BASE_DIR/current"
-      pm2 delete backend || true
-      pm2 start src/server.js --name backend --update-env
-      pm2 save
+      # ---------------------------
+      # Upload artifact (optional)
+      # ---------------------------
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend_${{ steps.version.outputs.version }}
+          path: ${{ env.ZIP_NAME }}
 
-      echo " Deployment completed successfully"
+      # ---------------------------
+      # Upload ZIP to EC2
+      # ---------------------------
+      - name: Upload ZIP to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: ${{ env.ZIP_NAME }}
+          target: /home/ubuntu/Academy_backend/deployments
+
+      # ---------------------------
+      # Deploy on EC2 (CLEAN & SAFE)
+      # ---------------------------
+      - name: Deploy on Server
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            VERSION="${{ steps.version.outputs.version }}"
+            BASE_DIR="/home/ubuntu/Academy_backend"
+            DEPLOY_DIR="$BASE_DIR/deployments"
+            RELEASES_DIR="$BASE_DIR/releases"
+            RELEASE_DIR="$RELEASES_DIR/$VERSION"
+            SHARED_DIR="$BASE_DIR/shared"
+            ZIP_FILE="backend_${VERSION}.zip"
+
+            echo "🚀 Deploying version: $VERSION"
+
+            # Ensure base directories exist
+            mkdir -p "$DEPLOY_DIR" "$RELEASES_DIR" "$SHARED_DIR"
+
+            # 🔥 CRITICAL FIX: remove any existing release directory
+            if [ -d "$RELEASE_DIR" ]; then
+              echo "🧹 Removing old release directory"
+              rm -rf "$RELEASE_DIR"
+            fi
+
+            # Create clean release directory
+            mkdir -p "$RELEASE_DIR"
+
+            # Extract fresh code
+            unzip -q "$DEPLOY_DIR/$ZIP_FILE" -d "$RELEASE_DIR"
+
+            # Link shared .env (CREATE THIS ON SERVER ONCE)
+            ln -sfn "$SHARED_DIR/.env" "$RELEASE_DIR/.env"
+
+            # Install production dependencies
+            cd "$RELEASE_DIR"
+            npm ci --omit=dev
+
+            # Switch current symlink
+            ln -sfn "$RELEASE_DIR" "$BASE_DIR/current"
+
+            # Restart PM2 CLEANLY (NO CACHE)
+            cd "$BASE_DIR/current"
+            pm2 delete backend || true
+            pm2 start src/server.js --name backend --update-env
+            pm2 save
+
+            echo "✅ Deployment completed successfully"
