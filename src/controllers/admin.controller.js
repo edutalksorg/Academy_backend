@@ -3,6 +3,7 @@ const { User, College, Test, Attempt } = require('../models');
 
 const { Op } = require('sequelize');
 
+
 async function getStats(req, res, next) {
   try {
     const totalColleges = await College.count();
