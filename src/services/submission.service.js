@@ -2,17 +2,19 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { TestCase } = require('../models');
+const os = require('os');
 
 const TIMEOUT_MS = 5000; // 5 seconds timeout
 
 async function runCode({ language, code, input }) {
     return new Promise((resolve, reject) => {
         const uniqueId = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-        const tempDir = path.join(__dirname, '../../temp', uniqueId);
+        const tempDir = path.join(os.tmpdir(), 'academy_run', uniqueId);
 
         // Ensure parent temp dir exists
-        if (!fs.existsSync(path.join(__dirname, '../../temp'))) {
-            fs.mkdirSync(path.join(__dirname, '../../temp'));
+        const parentDir = path.join(os.tmpdir(), 'academy_run');
+        if (!fs.existsSync(parentDir)) {
+            fs.mkdirSync(parentDir);
         }
 
         // Create isolated directory for this run
