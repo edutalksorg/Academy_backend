@@ -11,7 +11,7 @@ async function start() {
     // Sync models (use migrations in production)
     // Sync models (use migrations in production)
     // Using alter: true to ensure new columns (like 'type' in Question) are added
-    await sequelize.sync({ alter: true });
+    await sequelize.sync(); // Disabled alter:true to prevent ER_TOO_MANY_KEYS production crash
     logger.info('Database connected and models synced');
 
     if (process.env.SEED === 'true') {
