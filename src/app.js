@@ -11,10 +11,13 @@ const app = express();
 app.use(helmet());
 
 // ⭐ IMPORTANT: Replace default CORS with specific allowed origins
+app.set('trust proxy', 1); // Trust first proxy (necessary for rate limiter & correct IP)
+
 app.use(cors({
     origin: [
         "https://d3te24boxizt5g.cloudfront.net",
         "https://exam.eduexam.work.gd",
+        "https://exam.eduexam.work.gd/",
         "http://localhost:5173"
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
