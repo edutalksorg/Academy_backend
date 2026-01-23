@@ -29,7 +29,7 @@ async function runCode({ language, code, input }) {
         } else {
             fileName = `solution.${language === 'python' ? 'py' : 'js'}`;
             const filePath = path.join(tempDir, fileName);
-            command = language === 'python' ? `python "${filePath}"` : `node "${filePath}"`;
+            command = language === 'python' ? `python3 "${filePath}"` : `node "${filePath}"`;
         }
 
         const filePath = path.join(tempDir, fileName);
